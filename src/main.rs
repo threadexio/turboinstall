@@ -1,3 +1,23 @@
+#![deny(
+	clippy::all,
+	clippy::unwrap_used,
+	clippy::absurd_extreme_comparisons,
+	clippy::clone_on_copy
+)]
+#![allow(
+	clippy::collapsible_else_if,
+	clippy::collapsible_if,
+	clippy::comparison_chain
+)]
+
+mod cli;
+mod overlay;
+mod profile;
+
+use log::error;
+
 fn main() {
-	println!("Hello, world!");
+	if let Err(e) = cli::init() {
+		error!("{:#}", e);
+	}
 }
