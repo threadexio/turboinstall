@@ -117,6 +117,45 @@ impl Overlay {
 		profile: &dyn Profile,
 		options: &InstallOptions,
 	) -> Result<()> {
+		let mut ignore_regex = vec![
+			// always ignore the .turboinstall folder at the root
+			regex::Regex::new("^/.turboinstall")
+				.expect("invalid compile-time regex"),
+		];
+
+		let ignore_path =
+			self.src.join(".turboinstall").join("ignore");
+		if ignore_path.exists() {
+			let ignore_patterns = std::fs::read_to_string(
+				&ignore_path,
+			)
+			.with_context(move || {
+				format!(
+					"unable to read ignore file '{}'",
+					ignore_path.display()
+				)
+			})?;
+
+			for pattern in ignore_patterns.lines() {
+				let pattern = pattern.trim();
+
+				if pattern.is_empty() || pattern.starts_with('#') {
+					continue;
+				}
+
+				match regex::Regex::new(pattern) {
+					Ok(v) => ignore_regex.push(v),
+					Err(e) => {
+						bail!(
+							"failed to parse ignore pattern '{}': {}",
+							pattern,
+							e
+						)
+					},
+				}
+			}
+		}
+
 		let relative_paths = walkdir::WalkDir::new(&self.src)
 			// dont return self.src again
 			.min_depth(1)
@@ -132,18 +171,13 @@ impl Overlay {
 					.strip_prefix(&self.src)
 					.map(|x| x.to_path_buf())
 					.ok()
-			}).filter(|x| {
-				// filter out the hooks
-				if x.starts_with(".turbohooks") {
-					return false;
-				}
-
-				// filter out all the hidden files and directories
-				if let Some(name) = x.file_name() {
-					return !name.to_string_lossy().starts_with('.');
-				}
-
-				true
+			})
+			.filter(|x| {
+				// we add a / in front of the relative path
+				// so we can use the leading / to match files
+				// in the root of the overlay
+				let absolute_path = Path::new("/").join(x);
+				!ignore_regex.iter().any(|pattern| pattern.is_match(&absolute_path.to_string_lossy()))
 			});
 
 		for raw_path in relative_paths {
@@ -279,7 +313,7 @@ impl Overlay {
 
 		let hook_dir = self
 			.src
-			.join(".turbohooks")
+			.join(".turboinstall")
 			.join(hook_type.hook_dir_name());
 
 		if !hook_dir.exists() {

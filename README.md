@@ -11,10 +11,10 @@ A quick and simple tool that overlays directory trees.
 	* [Features](#features)
 	* [Installation](#installation)
 	* [Usage](#usage)
-		* [What is the profile?](#what-is-the-profile)
-			* [Path expansion](#path-expansion)
-				* [Example profiles](#example-profiles)
-		* [Using hooks](#using-hooks)
+		* [The ignore file](#the-ignore-file)
+		* [Profiles and path expansion](#profiles-and-path-expansion)
+			* [Example profiles](#example-profiles)
+		* [Hooks](#hooks)
 			* [Hook environment](#hook-environment)
 			* [Pre-install](#pre-install)
 			* [Post-install](#post-install)
@@ -110,15 +110,75 @@ The command to achieve this is:
 turboinstall ./dst ./src
 ```
 
-### What is the profile?
+### The ignore file
+
+The ignore file is a simple text file at `.turboinstall/ignore` that contains everyone's favorite regular expressions 🎉. Each line of the file contains a regex pattern that will be matched on each path of the overlay. In other words, just like `.gitignore` files.
+
+Let's suppose we have a source tree:
+
+```none
+ src/
+├──  .turboinstall/
+│   └──  ignore
+├──  dir0/
+│   ├──  dir1/
+│   │   ├──  file1
+│   │   └──  file2
+│   └──  file0
+└──  file0
+```
+
+and `src/.turboinstall/ignore` contains:
+
+```bash
+# This is a comment
+# Empty lines are also ignored
+
+/file0
+```
+
+This would mean that when we run `turboinstall ./dst ./src` we would get:
+
+```none
+ dst/
+└──  dir0/
+    └──  dir1/
+        ├──  file1
+        └──  file2
+```
+
+Notice how both `src/file0` and `src/dir0/file0` are missing. This is because unlike gitignore files, these files match with pure regex on paths. The pattern `/file0` from the ignore file matches both:
+
+* `/file0`
+* `/dir0/file0`
+
+Ok, so how can we **only** match `/file0`? This is very simple as long as you know basic regex. Just prepend the pattern with `^`, which means: only match the following if it is at the start of the path, so our ignore file becomes:
+
+```bash
+# This is a comment
+# Empty lines are also ignored
+
+^/file0
+```
+
+In this example the paths that will be tested are:
+
+* `/dir0`
+* `/dir0/dir1`
+* `/dir0/dir1/file1`
+* `/dir0/dir1/file2`
+* `/dir0/file0`
+* `/file0`
+
+> NOTE: Anything inside the `/.turboinstall` folder is always automatically ignored, there is no way to change this.
+
+### Profiles and path expansion
 
 The profile is a fancy way of saying `configuration file` or `variable store`. It is a file in one of the supported formats (see [Features](#features)) that holds the variables for the path expansion.
 
 > NOTE: Path expansion is not fully completed but it is functional
 
 Profiles are only used for path expansion and nothing else, they are not needed if don't plan to use this feature at all.
-
-#### Path expansion
 
 The following examples act in the same way, they are just expressed in different formats. This makes the tool easy to integrate with other custom tooling. The env format is especially useful because you can `source` it directly from shell scripts.
 
@@ -159,7 +219,7 @@ turboinstall ./dst ./src -p example_profile.json
 
 Where `example_profile.json` is the file with one of the example profiles bellow. It does not need to be named like that, just a normal file with the corresponding extension, otherwise you will need to specify the format with `-f`.
 
-##### Example profiles
+#### Example profiles
 
 **JSON:**
 
@@ -193,7 +253,7 @@ VARIABLE_1='VALUE_1'
 DIR="/usr/local"
 ```
 
-### Using hooks
+### Hooks
 
 Hooks are just executables placed in a special location that are executed in wildcard order (alphanumerical) with 2 arguments:
 
@@ -240,4 +300,4 @@ The executables insider `.turboinstall/pre-install`, like the name suggests are 
 
 #### Post-install
 
-The executables insider `.turboinstall/pre-install`, like the name suggests are run _after_ any of the source tree has been copied.
+The executables insider `.turboinstall/post-install`, like the name suggests are run _after_ any of the source tree has been copied.
