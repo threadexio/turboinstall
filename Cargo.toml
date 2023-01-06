@@ -13,7 +13,6 @@ anyhow = "1.0"
 log = "0.4"
 fern = { version = "0.6" }
 clap = { version = "4.0", features = ["cargo", "derive"] }
-clap_complete = { version = "4.0" }
 colored = { version = "2.0" }
 
 walkdir = "2"

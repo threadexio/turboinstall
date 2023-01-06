@@ -8,7 +8,15 @@ use crate::overlay;
 use crate::profile;
 
 #[derive(Debug, Parser)]
-pub struct Options {
+#[clap(
+	name = clap::crate_name!(),
+	about = clap::crate_description!(),
+	version = clap::crate_version!(),
+	author = clap::crate_authors!(),
+	disable_help_subcommand(true),
+	subcommand_negates_reqs(true)
+)]
+struct Options {
 	#[clap(
 		short = 'p',
 		long = "profile",
