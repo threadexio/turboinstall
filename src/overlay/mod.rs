@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
+use clap::{Args, ValueHint};
 use log::{info, warn};
 
 use crate::profile::Profile;
@@ -9,7 +10,7 @@ mod ignore;
 
 const DEFAULT_IGNORE: &[&str] = &["^/.turboinstall"];
 
-#[derive(Debug, clap::Args)]
+#[derive(Debug, Args)]
 pub struct InstallOptions {
 	#[clap(
 		short = 'l',
@@ -37,7 +38,9 @@ pub struct InstallOptions {
 	#[clap(
 		long = "ignore",
 		help = "Path to ignore file",
-		default_value = ".turboinstall/ignore"
+		default_value = ".turboinstall/ignore",
+		value_name("/path/to/file"),
+		value_hint(ValueHint::FilePath)
 	)]
 	pub ignore_path: PathBuf,
 
@@ -136,8 +139,13 @@ impl Overlay {
 		}
 
 		// load ignore file if it exists
-		if options.ignore_path.exists() {
-			ignore.add_from_file(&options.ignore_path)?;
+		{
+			// if the ignore path is absolute it will overwrite the self.src prefix
+			// and thus correctly use the absolute path
+			let ignore_path = self.src.join(&options.ignore_path);
+			if ignore_path.exists() {
+				ignore.add_from_file(ignore_path)?;
+			}
 		}
 
 		let relative_paths = walkdir::WalkDir::new(&self.src)
