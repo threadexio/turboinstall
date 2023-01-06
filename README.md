@@ -14,6 +14,10 @@ A quick and simple tool that overlays directory trees.
 		* [The ignore file](#the-ignore-file)
 		* [Profiles and path expansion](#profiles-and-path-expansion)
 			* [Example profiles](#example-profiles)
+				* [JSON](#json)
+				* [TOML](#toml)
+				* [YAML](#yaml)
+				* [ENV](#env)
 		* [Hooks](#hooks)
 			* [Hook environment](#hook-environment)
 			* [Pre-install](#pre-install)
@@ -45,7 +49,7 @@ If you do decide to try out this tool, please be aware that there probably are m
 * [x] 4 different profile formats (json, toml, yaml, env)
 * [x] Hooks for custom actions
 * [x] Pretty colors 🌈✨
-* [ ] Ability to define regex rules to ignore paths (like .gitignore)
+* [x] Ability to define regex rules to ignore paths (like .gitignore)
 * [ ] Shell completions
 
 ## Installation
@@ -62,6 +66,8 @@ cargo install turboinstall
 <summary>Command line arguments</summary>
 
 ```bash
+A simple tool for overlaying directory trees on top of each other
+
 Usage: turboinstall [OPTIONS] <dir> [dir]...
 
 Arguments:
@@ -74,10 +80,13 @@ Options:
   -l, --link                        Hard link files instead of copying
   -n, --no-clobber                  Do not overwrite existing files
   -u, --update                      Overwrite only when the source path is newer
+      --ignore </path/to/file>      Path to ignore file [default: .turboinstall/ignore]
       --dry-run                     Do not perform any filesystem operations (implies --no-hooks)
       --no-hooks                    Do not run any hooks
       --hooks <type,type,...>       Only run these types of hooks [possible values: pre-install, post-install]
   -h, --help                        Print help information
+  -V, --version                     Print version information
+
 ```
 
 </details>
@@ -221,7 +230,7 @@ Where `example_profile.json` is the file with one of the example profiles bellow
 
 #### Example profiles
 
-**JSON:**
+##### JSON
 
 ```json
 {
@@ -230,21 +239,21 @@ Where `example_profile.json` is the file with one of the example profiles bellow
 }
 ```
 
-**TOML:**
+##### TOML
 
 ```toml
 VARIABLE_1 = "VALUE_1"
 DIR = "/usr/local"
 ```
 
-**YAML:**
+##### YAML
 
 ```yaml
 VARIABLE_1: "VALUE_1"
 DIR: "/usr/local"
 ```
 
-**ENV:**
+##### ENV
 
 ```bash
 # This is a comment
@@ -296,8 +305,8 @@ Their working directory is left untouched and is the same as the working directo
 
 #### Pre-install
 
-The executables insider `.turboinstall/pre-install`, like the name suggests are run _before_ any of the actual source tree has been copied.
+The executables inside `.turboinstall/pre-install`, like the name suggests are ran _before_ any of the actual source tree has been copied.
 
 #### Post-install
 
-The executables insider `.turboinstall/post-install`, like the name suggests are run _after_ any of the source tree has been copied.
+The executables inside `.turboinstall/post-install`, like the name suggests are ran _after_ the source tree has been copied.
