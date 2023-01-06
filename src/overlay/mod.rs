@@ -1,9 +1,13 @@
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use log::{info, warn};
 
 use crate::profile::Profile;
+
+mod ignore;
+
+const DEFAULT_IGNORE: &[&str] = &["^/.turboinstall"];
 
 #[derive(Debug, clap::Args)]
 pub struct InstallOptions {
@@ -29,6 +33,13 @@ pub struct InstallOptions {
 		help = "Overwrite only when the source path is newer"
 	)]
 	pub update: bool,
+
+	#[clap(
+		long = "ignore",
+		help = "Path to ignore file",
+		default_value = ".turboinstall/ignore"
+	)]
+	pub ignore_path: PathBuf,
 
 	#[clap(
 		long = "dry-run",
@@ -117,43 +128,16 @@ impl Overlay {
 		profile: &dyn Profile,
 		options: &InstallOptions,
 	) -> Result<()> {
-		let mut ignore_regex = vec![
-			// always ignore the .turboinstall folder at the root
-			regex::Regex::new("^/.turboinstall")
-				.expect("invalid compile-time regex"),
-		];
+		let mut ignore = ignore::Ignore::empty();
 
-		let ignore_path =
-			self.src.join(".turboinstall").join("ignore");
-		if ignore_path.exists() {
-			let ignore_patterns = std::fs::read_to_string(
-				&ignore_path,
-			)
-			.with_context(move || {
-				format!(
-					"unable to read ignore file '{}'",
-					ignore_path.display()
-				)
-			})?;
+		// default ignores
+		for pattern in DEFAULT_IGNORE {
+			ignore.add_pattern(pattern).with_context(|| format!("Default pattern '{}' failed to compile. This is a bug!", pattern))?;
+		}
 
-			for pattern in ignore_patterns.lines() {
-				let pattern = pattern.trim();
-
-				if pattern.is_empty() || pattern.starts_with('#') {
-					continue;
-				}
-
-				match regex::Regex::new(pattern) {
-					Ok(v) => ignore_regex.push(v),
-					Err(e) => {
-						bail!(
-							"failed to parse ignore pattern '{}': {}",
-							pattern,
-							e
-						)
-					},
-				}
-			}
+		// load ignore file if it exists
+		if options.ignore_path.exists() {
+			ignore.add_from_file(&options.ignore_path)?;
 		}
 
 		let relative_paths = walkdir::WalkDir::new(&self.src)
@@ -177,34 +161,26 @@ impl Overlay {
 				// so we can use the leading / to match files
 				// in the root of the overlay
 				let absolute_path = Path::new("/").join(x);
-				!ignore_regex.iter().any(|pattern| pattern.is_match(&absolute_path.to_string_lossy()))
+				!ignore.matches(absolute_path.to_string_lossy())
 			});
 
 		for raw_path in relative_paths {
 			let src = self.src.join(&raw_path);
 
-			let mut dst = self.dst.clone();
-			for c in raw_path.components() {
-				let expanded_component = expand_vars(
-					&c.as_os_str().to_string_lossy(),
-					profile,
-				)
-				.context(format!(
-					"Unable to expand path '{}'",
-					src.display()
-				))?;
-
-				dst.push(
-					// absolute paths here overwrite the original path
-					expanded_component
-						.strip_prefix('/')
-						.unwrap_or(&expanded_component),
-				);
-			}
+			let dst = self.dst.join(
+				expand_path(&raw_path, profile).with_context(
+					move || {
+						format!(
+							"failed to expand path '{}'",
+							raw_path.display()
+						)
+					},
+				)?,
+			);
 
 			let src_metadata = src.metadata().with_context(|| {
 				format!(
-					"unable to get metadata for '{}'",
+					"failed to get metadata for '{}'",
 					src.display()
 				)
 			})?;
@@ -213,7 +189,7 @@ impl Overlay {
 				let dst_metadata =
 					dst.metadata().with_context(|| {
 						format!(
-							"unable to get metadata for '{}'",
+							"failed to get metadata for '{}'",
 							dst.display()
 						)
 					})?;
@@ -252,16 +228,12 @@ impl Overlay {
 				use std::fs;
 
 				if src.is_dir() {
-					if let Err(e) = fs::create_dir_all(&dst) {
-						use std::io::ErrorKind;
-						match e.kind() {
-							ErrorKind::AlreadyExists => {},
-							_ => bail!(anyhow!(e).context(format!(
-								"Unable to create directory '{}'",
-								dst.display()
-							))),
-						}
-					}
+					fs::create_dir_all(&dst).with_context(|| {
+						format!(
+							"failed to create directory '{}'",
+							dst.display()
+						)
+					})?;
 				} else {
 					// this handles the fact that `fs::hard_link` fails
 					// if dst already exists
@@ -272,19 +244,23 @@ impl Overlay {
 					}
 
 					if options.hard_link {
-						fs::hard_link(&src, &dst).context(
-							format!(
-								"Unable to hard link '{}' to '{}'",
+						fs::hard_link(&src, &dst).with_context(
+							|| {
+								format!(
+								"failed to hard link '{}' to '{}'",
 								src.display(),
 								dst.display()
-							),
+							)
+							},
 						)?;
 					} else {
-						fs::copy(&src, &dst).context(format!(
-							"Unable to install '{}' to '{}'",
-							src.display(),
-							dst.display()
-						))?;
+						fs::copy(&src, &dst).with_context(|| {
+							format!(
+								"failed to install '{}' to '{}'",
+								src.display(),
+								dst.display()
+							)
+						})?;
 					}
 				}
 			}
@@ -413,6 +389,28 @@ fn expand_vars(s: &str, profile: &dyn Profile) -> Result<String> {
 	}
 
 	Ok(ret)
+}
+
+fn expand_path(
+	p: impl AsRef<Path>,
+	profile: &dyn Profile,
+) -> Result<PathBuf> {
+	let mut path = PathBuf::new();
+
+	for component in p
+		.as_ref()
+		.components()
+		.map(|x| x.as_os_str().to_string_lossy())
+	{
+		let expanded = expand_vars(&component, profile)?;
+
+		let expanded =
+			expanded.strip_prefix('/').unwrap_or(&expanded);
+
+		path.push(expanded);
+	}
+
+	Ok(path)
 }
 
 #[cfg(test)]
