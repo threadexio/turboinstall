@@ -1,6 +1,6 @@
 [package]
 name = "turboinstall"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["threadexio <pzarganitis@gmail.com>"]
 description = "A simple tool for overlaying directory trees on top of each other"
