@@ -81,12 +81,12 @@ pub struct Options {
 
 	#[clap(
 		long = "ignore",
-		help = "Path to ignore file",
-		default_value = ".turboinstall/ignore",
-		value_name("/path/to/file"),
+		help = "Paths to extra ignore files",
+		value_name("path,path,..."),
+		value_delimiter(','),
 		value_hint(ValueHint::FilePath)
 	)]
-	pub ignore_path: PathBuf,
+	pub ignore_paths: Vec<PathBuf>,
 
 	#[clap(long = "no-abort", help = "Don't exit on error")]
 	pub no_abort: bool,

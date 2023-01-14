@@ -10,6 +10,12 @@ use crate::profile::Profile;
 mod ignore;
 pub mod platform;
 
+lazy_static::lazy_static! {
+	static ref DEFAULT_IGNORE_FILES: Vec<PathBuf> = [
+		".turboinstall/ignore"
+	].iter().map(|x| Path::new(x).to_path_buf()).collect();
+}
+
 const DEFAULT_IGNORE: &[&str] = &["^/.turboinstall"];
 
 #[derive(Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
@@ -88,13 +94,19 @@ impl Overlay {
 			ignore.add_pattern(pattern).with_context(|| format!("Default pattern '{}' failed to compile. This is a bug!", pattern))?;
 		}
 
-		// load ignore file if it exists
+		// load ignore files if they exists
 		{
 			// if the ignore path is absolute it will overwrite the self.src prefix
 			// and thus correctly use the absolute path
-			let ignore_path = self.src.join(&options.ignore_path);
-			if ignore_path.exists() {
-				ignore.add_from_file(ignore_path)?;
+			for ignore_path in DEFAULT_IGNORE_FILES
+				.iter()
+				.chain(options.ignore_paths.iter())
+			{
+				let ignore_path = self.src.join(ignore_path);
+
+				if ignore_path.exists() {
+					ignore.add_from_file(ignore_path)?;
+				}
 			}
 		}
 
