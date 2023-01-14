@@ -6,12 +6,6 @@ pub(self) mod prelude {
 	pub use std::path::Path;
 }
 
-// TODO: Finish NT specific implementations
-// Windows specific implementations
-//#[cfg(windows)]
-//#[path = "nt/mod.rs"]
-//mod imp;
-
 // Unix specific implementations
 #[cfg(unix)]
 #[path = "unix/mod.rs"]

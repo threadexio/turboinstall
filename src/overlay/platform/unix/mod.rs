@@ -3,13 +3,20 @@ use super::prelude::*;
 use std::fs;
 use std::os::unix::prelude::*;
 
-use anyhow::Context;
+use anyhow::{bail, Context};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 enum Preserve {
 	Ownership,
 	Timestamps,
 	// TODO: Maybe also xattrs
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum Reflink {
+	Never,
+	Always,
+	Auto,
 }
 
 #[derive(Debug, clap::Args)]
@@ -22,6 +29,15 @@ pub struct PlatformOptions {
 		conflicts_with("hard_link")
 	)]
 	preserve: Vec<Preserve>,
+
+	#[clap(
+		long = "reflink",
+		help = "Create clone/CoW copies",
+		default_value = "auto",
+		value_name("when"),
+		conflicts_with("hard_link")
+	)]
+	reflink: Reflink,
 }
 
 pub fn create_dir_all(dst_path: &Path, _: &Options) -> Result<()> {
@@ -57,29 +73,55 @@ pub fn copy(
 		.open(dst_path)
 		.context("failed to open destination")?;
 
-	// tell the kernel we are going to need dst
-	// so it can load it in memory
-	nix::fcntl::posix_fadvise(
-		dst.as_raw_fd(),
-		0,
-		i64::MAX,
-		nix::fcntl::PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
-	)
-	.context("failed to preload destination")?;
+	// decide if we are going to use reflinks
+	{
+		let reflink = || reflink(dst.as_raw_fd(), src.as_raw_fd());
 
-	// std::fs::copy also copies the permissions, so we have to guarantee the same behavior
-	fs::set_permissions(dst_path, src_metadata.permissions())
-		.context("failed to preserve permissions")?;
+		let copy_file = || -> Result<()> {
+			// tell the kernel we are going to need dst
+			// so it can load it in memory
+			nix::fcntl::posix_fadvise(
+				dst.as_raw_fd(),
+				0,
+				i64::MAX,
+				nix::fcntl::PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
+			)
+			.context("failed to preload destination")?;
 
-	nix::fcntl::copy_file_range(
-		src.as_raw_fd(),
-		None,
-		dst.as_raw_fd(),
-		None,
-		usize::MAX,
-	)
-	.context("failed to copy file data")?;
+			// std::fs::copy also copies the permissions, so we have to guarantee the same behavior
+			fs::set_permissions(dst_path, src_metadata.permissions())
+				.context("failed to preserve permissions")?;
 
+			nix::fcntl::copy_file_range(
+				src.as_raw_fd(),
+				None,
+				dst.as_raw_fd(),
+				None,
+				usize::MAX,
+			)
+			.context("failed to copy file data")?;
+
+			Ok(())
+		};
+
+		match options.platform_options.reflink {
+			Reflink::Always => {
+				if !reflink() {
+					bail!("failed to create reflink");
+				}
+			},
+			Reflink::Never => {
+				copy_file()?;
+			},
+			Reflink::Auto => {
+				if !reflink() {
+					copy_file()?;
+				}
+			},
+		}
+	}
+
+	// preserve attributes
 	for p in &options.platform_options.preserve {
 		match p {
 			Preserve::Ownership => {
@@ -115,4 +157,14 @@ pub fn copy(
 	}
 
 	Ok(())
+}
+
+/// Reflink `src` to `dst`
+///
+/// Equivalent to: `ioctl(dst, FICLONE, src)`
+///
+/// Returns:
+/// Whether the `ioctl()` call succeeded
+fn reflink(dst: RawFd, src: RawFd) -> bool {
+	unsafe { nix::libc::ioctl(dst, nix::libc::FICLONE, src) == 0 }
 }
