@@ -14,6 +14,8 @@ mod cli;
 mod overlay;
 mod profile;
 
+use std::process::exit;
+
 use log::error;
 
 fn main() {
@@ -25,5 +27,7 @@ fn main() {
 
 		#[cfg(not(debug_assertions))]
 		error!("{:#}", e);
+
+		exit(1);
 	}
 }

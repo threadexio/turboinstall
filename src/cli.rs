@@ -59,6 +59,13 @@ pub struct Options {
 	pub update: bool,
 
 	#[clap(
+		short = 'q',
+		long = "quiet",
+		help = "Don't print anything to the console"
+	)]
+	pub quiet: bool,
+
+	#[clap(
 		long = "ignore",
 		help = "Path to ignore file",
 		default_value = ".turboinstall/ignore",
@@ -149,11 +156,11 @@ pub fn init() -> Result<()> {
 }
 
 use colored::Colorize;
-fn init_log(_options: &Options) -> Result<()> {
+fn init_log(options: &Options) -> Result<()> {
 	use log::Level;
 
-	let fern = fern::Dispatch::new()
-		.format(move |out, message, record| {
+	let mut fern =
+		fern::Dispatch::new().format(move |out, message, record| {
 			if record.target() == "no_fmt" {
 				out.finish(format_args!("{}", message))
 			} else {
@@ -171,8 +178,11 @@ fn init_log(_options: &Options) -> Result<()> {
 					message
 				))
 			}
-		})
-		.chain(std::io::stderr());
+		});
+
+	if !options.quiet {
+		fern = fern.chain(std::io::stderr());
+	}
 
 	fern.apply().context("Unable to initialize logger")?;
 
