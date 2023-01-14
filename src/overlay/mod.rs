@@ -8,6 +8,7 @@ use crate::cli::Options;
 use crate::profile::Profile;
 
 mod ignore;
+pub mod platform;
 
 const DEFAULT_IGNORE: &[&str] = &["^/.turboinstall"];
 
@@ -196,40 +197,33 @@ impl Overlay {
 		}
 
 		if !options.dry_run {
-			use std::fs;
-
 			if src.is_dir() {
-				fs::create_dir_all(&dst).with_context(|| {
-					format!(
-						"failed to create directory '{}'",
-						dst.display()
-					)
-				})?;
+				platform::create_dir_all(&dst, options)
+					.with_context(|| {
+						format!(
+							"failed to create directory '{}'",
+							dst.display()
+						)
+					})?;
 			} else {
-				// this handles the fact that `fs::hard_link` fails
-				// if dst already exists
-				// and that trying to copy after linking will not remove
-				// the link
-				if dst.exists() {
-					let _ = fs::remove_file(&dst);
-				}
-
 				if options.hard_link {
-					fs::hard_link(&src, &dst).with_context(|| {
-						format!(
-							"failed to hard link '{}' to '{}'",
-							src.display(),
-							dst.display()
-						)
-					})?;
+					platform::hard_link(&src, &dst, options)
+						.with_context(|| {
+							format!(
+								"failed to hard link '{}' to '{}'",
+								src.display(),
+								dst.display()
+							)
+						})?
 				} else {
-					fs::copy(&src, &dst).with_context(|| {
-						format!(
-							"failed to install '{}' to '{}'",
-							src.display(),
-							dst.display()
-						)
-					})?;
+					platform::copy(&src, &dst, options)
+						.with_context(|| {
+							format!(
+								"failed to install '{}' to '{}'",
+								src.display(),
+								dst.display()
+							)
+						})?;
 				}
 			}
 		}

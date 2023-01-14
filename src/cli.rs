@@ -114,6 +114,9 @@ pub struct Options {
 		conflicts_with("quiet")
 	)]
 	pub machine_readable: bool,
+
+	#[clap(flatten)]
+	pub platform_options: overlay::platform::PlatformOptions,
 }
 
 pub fn init() -> Result<()> {
