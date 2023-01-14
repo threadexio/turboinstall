@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use clap::{Args, ValueHint};
+use colored::Colorize;
 use log::{info, warn};
 
 use crate::profile::Profile;
@@ -172,19 +173,17 @@ impl Overlay {
 				!ignore.matches(absolute_path.to_string_lossy())
 			});
 
-		for raw_path in relative_paths {
-			let src = self.src.join(&raw_path);
+		for src_rel_path in relative_paths {
+			let dst_rel_path = expand_path(&src_rel_path, profile)
+				.with_context(|| {
+					format!(
+						"failed to expand path '{}'",
+						src_rel_path.display()
+					)
+				})?;
 
-			let dst = self.dst.join(
-				expand_path(&raw_path, profile).with_context(
-					move || {
-						format!(
-							"failed to expand path '{}'",
-							raw_path.display()
-						)
-					},
-				)?,
-			);
+			let src = self.src.join(&src_rel_path);
+			let dst = self.dst.join(&dst_rel_path);
 
 			let src_metadata = src.metadata().with_context(|| {
 				format!(
@@ -273,7 +272,7 @@ impl Overlay {
 				}
 			}
 
-			info!("{} → {}", src.display(), dst.display());
+			info!(target: "no_fmt", "{:>12} {} {} {}", "Installing".bold().bright_green(), src.display(), "to".bold().bright_cyan(), dst.display());
 		}
 
 		Ok(())
@@ -324,7 +323,7 @@ impl Overlay {
 			.try_for_each(move |hook_path| {
 				use std::process::Command;
 
-				info!("running hook '{}'", hook_path.display());
+				info!(target: "no_fmt", "{:>12} {}", "Running".bold().bright_white(), hook_path.display());
 
 				let status = match Command::new(&hook_path)
 					.arg(&self.src)

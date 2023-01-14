@@ -21,7 +21,7 @@ fn main() {
 		// when running in debug builds show a stack
 		// trace for easier debugging of errors
 		#[cfg(debug_assertions)]
-		error!("{:#?}", e);
+		error!("{:?}", e);
 
 		#[cfg(not(debug_assertions))]
 		error!("{:#}", e);

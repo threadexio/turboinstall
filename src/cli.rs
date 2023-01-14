@@ -112,18 +112,22 @@ fn init_log(_options: &Options) -> Result<()> {
 
 	let fern = fern::Dispatch::new()
 		.format(move |out, message, record| {
-			out.finish(format_args!(
-				" {} {}",
-				match record.level() {
-					Level::Error => "›".red(),
-					Level::Warn => "›".yellow(),
-					Level::Info => "›".cyan(),
-					Level::Debug => "›".white(),
-					Level::Trace =>
-						record.level().as_str().bright_white(),
-				},
-				message
-			))
+			if record.target() == "no_fmt" {
+				out.finish(format_args!("{}", message))
+			} else {
+				out.finish(format_args!(
+					"{:>12} {}",
+					match record.level() {
+						Level::Error => "Error".bold().bright_red(),
+						Level::Warn =>
+							"Warning".bold().bright_yellow(),
+						Level::Info => "Info".bold().bright_green(),
+						Level::Debug => "Debug".bold().bright_white(),
+						Level::Trace => "Trace".bold().bright_white(),
+					},
+					message
+				))
+			}
 		})
 		.chain(std::io::stderr());
 
