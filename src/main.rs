@@ -20,12 +20,6 @@ use log::error;
 
 fn main() {
 	if let Err(e) = cli::init() {
-		// when running in debug builds show a stack
-		// trace for easier debugging of errors
-		#[cfg(debug_assertions)]
-		error!("{:?}", e);
-
-		#[cfg(not(debug_assertions))]
 		error!("{:#}", e);
 
 		exit(1);

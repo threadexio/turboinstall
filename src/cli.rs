@@ -18,6 +18,20 @@ use crate::profile;
 )]
 pub struct Options {
 	#[clap(
+		help = "Destination directory",
+		value_name("dir"),
+		value_hint(ValueHint::DirPath)
+	)]
+	pub dst: PathBuf,
+
+	#[clap(
+		help = "Overlay source(s)",
+		value_name("dir"),
+		value_hint(ValueHint::DirPath)
+	)]
+	pub src: Vec<PathBuf>,
+
+	#[clap(
 		short = 'p',
 		long = "profile",
 		help = "Path to the file with the profile definition",
@@ -95,18 +109,11 @@ pub struct Options {
 	pub hook_types: Vec<overlay::HookType>,
 
 	#[clap(
-		help = "Destination directory",
-		value_name("dir"),
-		value_hint(ValueHint::DirPath)
+		long = "porcelain",
+		help = "Use machine readable output",
+		conflicts_with("quiet")
 	)]
-	pub dst: PathBuf,
-
-	#[clap(
-		help = "Overlay source(s)",
-		value_name("dir"),
-		value_hint(ValueHint::DirPath)
-	)]
-	pub src: Vec<PathBuf>,
+	pub machine_readable: bool,
 }
 
 pub fn init() -> Result<()> {
@@ -114,6 +121,12 @@ pub fn init() -> Result<()> {
 	Options::command().debug_assert();
 
 	let mut options = Options::parse();
+
+	// if stdout is not a tty, then we must be being piped
+	// to somewhere else, use machine readable output
+	if atty::isnt(atty::Stream::Stdout) {
+		options.machine_readable = true;
+	}
 
 	init_log(&options)?;
 
@@ -180,7 +193,7 @@ fn init_log(options: &Options) -> Result<()> {
 			}
 		});
 
-	if !options.quiet {
+	if !(options.quiet || options.machine_readable) {
 		fern = fern.chain(std::io::stderr());
 	}
 
