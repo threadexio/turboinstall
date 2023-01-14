@@ -1,16 +1,118 @@
 use super::prelude::*;
 
+use std::fs;
+use std::os::unix::prelude::*;
+
+use anyhow::Context;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum Preserve {
+	Ownership,
+	Timestamps,
+	// TODO: Maybe also xattrs
+}
+
 #[derive(Debug, clap::Args)]
-pub struct PlatformOptions {}
-
-pub fn create_dir_all(dst: &Path, _: &Options) -> Result<()> {
-	todo!()
+pub struct PlatformOptions {
+	#[clap(
+		long = "preserve",
+		help = "Preserve the specified attributes",
+		value_name("attr,attr,..."),
+		value_delimiter(','),
+		conflicts_with("hard_link")
+	)]
+	preserve: Vec<Preserve>,
 }
 
-pub fn hard_link(src: &Path, dst: &Path, _: &Options) -> Result<()> {
-	todo!()
+pub fn create_dir_all(dst_path: &Path, _: &Options) -> Result<()> {
+	fs::create_dir_all(dst_path)?;
+	Ok(())
 }
 
-pub fn copy(src: &Path, dst: &Path, _: &Options) -> Result<()> {
-	todo!()
+pub fn hard_link(
+	src_path: &Path,
+	dst_path: &Path,
+	_: &Options,
+) -> Result<()> {
+	fs::hard_link(src_path, dst_path)?;
+	Ok(())
+}
+
+pub fn copy(
+	src_path: &Path,
+	dst_path: &Path,
+	options: &Options,
+) -> Result<()> {
+	let src_metadata = src_path.metadata()?;
+
+	let src = fs::OpenOptions::new()
+		.read(true)
+		.open(src_path)
+		.context("failed to open source")?;
+	let dst = fs::OpenOptions::new()
+		.write(true)
+		.create(true)
+		.truncate(true)
+		.custom_flags(nix::libc::O_CLOEXEC)
+		.open(dst_path)
+		.context("failed to open destination")?;
+
+	// tell the kernel we are going to need dst
+	// so it can load it in memory
+	nix::fcntl::posix_fadvise(
+		dst.as_raw_fd(),
+		0,
+		i64::MAX,
+		nix::fcntl::PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
+	)
+	.context("failed to preload destination")?;
+
+	// std::fs::copy also copies the permissions, so we have to guarantee the same behavior
+	fs::set_permissions(dst_path, src_metadata.permissions())
+		.context("failed to preserve permissions")?;
+
+	nix::fcntl::copy_file_range(
+		src.as_raw_fd(),
+		None,
+		dst.as_raw_fd(),
+		None,
+		usize::MAX,
+	)
+	.context("failed to copy file data")?;
+
+	for p in &options.platform_options.preserve {
+		match p {
+			Preserve::Ownership => {
+				use nix::unistd::{fchown, Gid, Uid};
+
+				let uid = src_metadata.uid();
+				let gid = src_metadata.gid();
+
+				fchown(
+					dst.as_raw_fd(),
+					Some(Uid::from_raw(uid)),
+					Some(Gid::from_raw(gid)),
+				)
+				.context("failed to preserve ownership")?;
+			},
+			Preserve::Timestamps => {
+				use nix::sys::{stat::futimens, time::TimeSpec};
+
+				let atime = TimeSpec::new(
+					src_metadata.atime(),
+					src_metadata.atime_nsec(),
+				);
+
+				let mtime = TimeSpec::new(
+					src_metadata.mtime(),
+					src_metadata.mtime_nsec(),
+				);
+
+				futimens(dst.as_raw_fd(), &atime, &mtime)
+					.context("failed to preserve timestamps")?;
+			},
+		}
+	}
+
+	Ok(())
 }

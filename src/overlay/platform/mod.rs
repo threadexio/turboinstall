@@ -12,15 +12,14 @@ pub(self) mod prelude {
 //#[path = "nt/mod.rs"]
 //mod imp;
 
-// TODO: Finish Unix specific implementations
 // Unix specific implementations
-//#[cfg(unix)]
-//#[path = "unix/mod.rs"]
-//mod imp;
+#[cfg(unix)]
+#[path = "unix/mod.rs"]
+mod imp;
 
 // Fallback implementations
-//#[cfg(all(not(windows), not(unix)))]
+#[cfg(all(not(unix)))]
 #[path = "fallback/mod.rs"]
 mod imp;
 
-pub use imp::*;
+pub use imp::{copy, create_dir_all, hard_link, PlatformOptions};
