@@ -1,67 +1,15 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
-use clap::{Args, ValueHint};
 use colored::Colorize;
-use log::{info, warn};
+use log::{error, info, warn};
 
+use crate::cli::Options;
 use crate::profile::Profile;
 
 mod ignore;
 
 const DEFAULT_IGNORE: &[&str] = &["^/.turboinstall"];
-
-#[derive(Debug, Args)]
-pub struct InstallOptions {
-	#[clap(
-		short = 'l',
-		long = "link",
-		help = "Hard link files instead of copying",
-		conflicts_with("update")
-	)]
-	pub hard_link: bool,
-
-	#[clap(
-		short = 'n',
-		long = "no-clobber",
-		help = "Do not overwrite existing files",
-		conflicts_with("update")
-	)]
-	pub no_overwrite: bool,
-
-	#[clap(
-		short = 'u',
-		long = "update",
-		help = "Overwrite only when the source path is newer"
-	)]
-	pub update: bool,
-
-	#[clap(
-		long = "ignore",
-		help = "Path to ignore file",
-		default_value = ".turboinstall/ignore",
-		value_name("/path/to/file"),
-		value_hint(ValueHint::FilePath)
-	)]
-	pub ignore_path: PathBuf,
-
-	#[clap(
-		long = "dry-run",
-		help = "Do not perform any filesystem operations (implies --no-hooks)"
-	)]
-	pub dry_run: bool,
-
-	#[clap(long = "no-hooks", help = "Do not run any hooks")]
-	pub no_hooks: bool,
-
-	#[clap(
-		long = "hooks",
-		help = "Only run these types of hooks",
-		value_name("type,type,..."),
-		value_delimiter(',')
-	)]
-	pub hook_types: Vec<HookType>,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
 pub enum HookType {
@@ -130,7 +78,7 @@ impl Overlay {
 	pub fn install(
 		&mut self,
 		profile: &dyn Profile,
-		options: &InstallOptions,
+		options: &Options,
 	) -> Result<()> {
 		let mut ignore = ignore::Ignore::empty();
 
@@ -174,106 +122,119 @@ impl Overlay {
 			});
 
 		for src_rel_path in relative_paths {
-			let dst_rel_path = expand_path(&src_rel_path, profile)
-				.with_context(|| {
-					format!(
-						"failed to expand path '{}'",
-						src_rel_path.display()
-					)
-				})?;
+			let r = self.install_path(src_rel_path, profile, options);
 
-			let src = self.src.join(&src_rel_path);
-			let dst = self.dst.join(&dst_rel_path);
+			if options.no_abort {
+				if let Err(e) = r {
+					error!("{} {:#}", "[Silent]".dimmed().white(), e);
+				}
+			} else {
+				r?
+			}
+		}
 
-			let src_metadata = src.metadata().with_context(|| {
+		Ok(())
+	}
+
+	fn install_path(
+		&self,
+		src_rel_path: PathBuf,
+		profile: &dyn Profile,
+		options: &Options,
+	) -> Result<()> {
+		let dst_rel_path = expand_path(&src_rel_path, profile)
+			.with_context(|| {
 				format!(
-					"failed to get metadata for '{}'",
-					src.display()
+					"failed to expand path '{}'",
+					src_rel_path.display()
 				)
 			})?;
 
-			if dst.exists() {
-				let dst_metadata =
-					dst.metadata().with_context(|| {
-						format!(
-							"failed to get metadata for '{}'",
-							dst.display()
-						)
-					})?;
+		let src = self.src.join(&src_rel_path);
+		let dst = self.dst.join(&dst_rel_path);
 
-				if options.update {
-					let now = std::time::SystemTime::now();
+		let src_metadata = src.metadata().with_context(|| {
+			format!("failed to get metadata for '{}'", src.display())
+		})?;
 
-					let src_mtime =
-						src_metadata.modified().unwrap_or(now);
-					let dst_mtime =
-						dst_metadata.modified().unwrap_or(now);
+		if dst.exists() {
+			let dst_metadata = dst.metadata().with_context(|| {
+				format!(
+					"failed to get metadata for '{}'",
+					dst.display()
+				)
+			})?;
 
-					if src_mtime < dst_mtime {
-						warn!(
-							"destination '{}' is newer than source '{}'",
-							dst.display(),
-							src.display(),
-						);
-						continue;
-					} else if src_mtime == dst_mtime {
-						// dont do unnecessary operations
-						continue;
-					}
-				}
+			if options.update {
+				let now = std::time::SystemTime::now();
 
-				if options.no_overwrite {
+				let src_mtime =
+					src_metadata.modified().unwrap_or(now);
+				let dst_mtime =
+					dst_metadata.modified().unwrap_or(now);
+
+				if src_mtime < dst_mtime {
 					warn!(
-						"not overwriting existing path '{}'",
-						dst.display()
+						"destination '{}' is newer than source '{}'",
+						dst.display(),
+						src.display(),
 					);
-					continue;
+					return Ok(());
+				} else if src_mtime == dst_mtime {
+					// dont do unnecessary operations
+					return Ok(());
 				}
 			}
 
-			if !options.dry_run {
-				use std::fs;
+			if options.no_overwrite {
+				warn!(
+					"not overwriting existing path '{}'",
+					dst.display()
+				);
+				return Ok(());
+			}
+		}
 
-				if src.is_dir() {
-					fs::create_dir_all(&dst).with_context(|| {
+		if !options.dry_run {
+			use std::fs;
+
+			if src.is_dir() {
+				fs::create_dir_all(&dst).with_context(|| {
+					format!(
+						"failed to create directory '{}'",
+						dst.display()
+					)
+				})?;
+			} else {
+				// this handles the fact that `fs::hard_link` fails
+				// if dst already exists
+				// and that trying to copy after linking will not remove
+				// the link
+				if dst.exists() {
+					let _ = fs::remove_file(&dst);
+				}
+
+				if options.hard_link {
+					fs::hard_link(&src, &dst).with_context(|| {
 						format!(
-							"failed to create directory '{}'",
+							"failed to hard link '{}' to '{}'",
+							src.display(),
 							dst.display()
 						)
 					})?;
 				} else {
-					// this handles the fact that `fs::hard_link` fails
-					// if dst already exists
-					// and that trying to copy after linking will not remove
-					// the link
-					if dst.exists() {
-						let _ = fs::remove_file(&dst);
-					}
-
-					if options.hard_link {
-						fs::hard_link(&src, &dst).with_context(
-							|| {
-								format!(
-								"failed to hard link '{}' to '{}'",
-								src.display(),
-								dst.display()
-							)
-							},
-						)?;
-					} else {
-						fs::copy(&src, &dst).with_context(|| {
-							format!(
-								"failed to install '{}' to '{}'",
-								src.display(),
-								dst.display()
-							)
-						})?;
-					}
+					fs::copy(&src, &dst).with_context(|| {
+						format!(
+							"failed to install '{}' to '{}'",
+							src.display(),
+							dst.display()
+						)
+					})?;
 				}
 			}
-
-			info!(target: "no_fmt", "{:>12} {} {} {}", "Installing".bold().bright_green(), src.display(), "to".bold().bright_cyan(), dst.display());
 		}
+
+		info!(target: "no_fmt", "{:>12} {} {} {}", "Installing".bold().bright_green(), src.display(), "to".bold().bright_cyan(), dst.display());
 
 		Ok(())
 	}
@@ -281,7 +242,7 @@ impl Overlay {
 	pub fn run_hooks(
 		&mut self,
 		hook_type: HookType,
-		options: &InstallOptions,
+		options: &Options,
 	) -> Result<()> {
 		if options.no_hooks {
 			return Ok(());

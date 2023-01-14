@@ -5,7 +5,7 @@ use anyhow::{bail, Context, Result};
 mod env;
 mod serde;
 
-#[derive(Debug, Clone, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
 pub enum Format {
 	Json,
 	Toml,

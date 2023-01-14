@@ -16,7 +16,7 @@ use crate::profile;
 	disable_help_subcommand(true),
 	subcommand_negates_reqs(true)
 )]
-struct Options {
+pub struct Options {
 	#[clap(
 		short = 'p',
 		long = "profile",
@@ -35,8 +35,57 @@ struct Options {
 	)]
 	pub profile_format: Option<profile::Format>,
 
-	#[clap(flatten)]
-	pub install_options: overlay::InstallOptions,
+	#[clap(
+		short = 'l',
+		long = "link",
+		help = "Hard link files instead of copying",
+		conflicts_with("update")
+	)]
+	pub hard_link: bool,
+
+	#[clap(
+		short = 'n',
+		long = "no-clobber",
+		help = "Do not overwrite existing files",
+		conflicts_with("update")
+	)]
+	pub no_overwrite: bool,
+
+	#[clap(
+		short = 'u',
+		long = "update",
+		help = "Overwrite only when the source path is newer"
+	)]
+	pub update: bool,
+
+	#[clap(
+		long = "ignore",
+		help = "Path to ignore file",
+		default_value = ".turboinstall/ignore",
+		value_name("/path/to/file"),
+		value_hint(ValueHint::FilePath)
+	)]
+	pub ignore_path: PathBuf,
+
+	#[clap(long = "no-abort", help = "Don't exit on error")]
+	pub no_abort: bool,
+
+	#[clap(
+		long = "dry-run",
+		help = "Do not perform any filesystem operations (implies --no-hooks)"
+	)]
+	pub dry_run: bool,
+
+	#[clap(long = "no-hooks", help = "Do not run any hooks")]
+	pub no_hooks: bool,
+
+	#[clap(
+		long = "hooks",
+		help = "Only run these types of hooks",
+		value_name("type,type,..."),
+		value_delimiter(',')
+	)]
+	pub hook_types: Vec<overlay::HookType>,
 
 	#[clap(
 		help = "Destination directory",
@@ -65,8 +114,8 @@ pub fn init() -> Result<()> {
 		bail!("You must specify at least one source path.")
 	}
 
-	if options.install_options.dry_run {
-		options.install_options.no_hooks = true;
+	if options.dry_run {
+		options.no_hooks = true;
 	}
 
 	// if the file does not exist default to using an empty profile
@@ -89,18 +138,11 @@ pub fn init() -> Result<()> {
 	for overlay in &mut overlays {
 		use overlay::HookType;
 
-		overlay.run_hooks(
-			HookType::PreInstall,
-			&options.install_options,
-		)?;
+		overlay.run_hooks(HookType::PreInstall, &options)?;
 
-		overlay
-			.install(profile.as_ref(), &options.install_options)?;
+		overlay.install(profile.as_ref(), &options)?;
 
-		overlay.run_hooks(
-			HookType::PostInstall,
-			&options.install_options,
-		)?;
+		overlay.run_hooks(HookType::PostInstall, &options)?;
 	}
 
 	Ok(())
@@ -122,7 +164,8 @@ fn init_log(_options: &Options) -> Result<()> {
 						Level::Warn =>
 							"Warning".bold().bright_yellow(),
 						Level::Info => "Info".bold().bright_green(),
-						Level::Debug => "Debug".bold().bright_white(),
+						Level::Debug =>
+							"Verbose".bold().bright_white(),
 						Level::Trace => "Trace".bold().bright_white(),
 					},
 					message
