@@ -1,5 +1,7 @@
 # turboinstall
 
+> <span style="color:yellow"> ⚠️ Warning:</span> This tool is not fully finished and there are some bugs.
+
 A quick and simple tool that overlays directory trees.
 
 ## Table of contents
@@ -9,6 +11,8 @@ A quick and simple tool that overlays directory trees.
 	* [What does this mean?](#what-does-this-mean)
 	* [Who even needs this?](#who-even-needs-this)
 	* [Features](#features)
+		* [Platform specific](#platform-specific)
+			* [Unix](#unix)
 	* [Installation](#installation)
 	* [Usage](#usage)
 		* [The ignore file](#the-ignore-file)
@@ -29,28 +33,27 @@ It means you can effortlessly and easily install files to the right places witho
 
 ## Who even needs this?
 
-Ever needed to create some sort of directory layering for packaging applications? In reality this tool was made to serve a very specific need: the runtime system for my  [zeus](https://github.com/threadexio/zeus) project and more specifically how the packaging for those works.
-
-I wrote a similar tool for this job in bash but it had some problems:
-
-1. It was quick and dirty
-2. It does not run reliably on systems with other versions of coreutils
-3. It does not run under native Windows (dear god why would you even want to do that?)
-4. I wanted something more official and well-made
-
-So here I am, coding a simple tool for a very specific purpose. If you find this tool neat consider giving it a star ⭐
+Ever needed to create some sort of directory layering for packaging applications? In reality this tool was made to serve a very specific need: the runtime system for my  [zeus](https://github.com/threadexio/zeus) project and more specifically how the packaging for that works.
 
 If you do decide to try out this tool, please be aware that there probably are many bugs (especially in path traversal), use it with care.
 
 ## Features
 
-* [x] Overlay multiple sources trees on top of each other
-* [x] In-path variable expansion (basically path substitution)
-* [x] 4 different profile formats (json, toml, yaml, env)
-* [x] Hooks for custom actions
-* [x] Pretty colors 🌈✨
-* [x] Ability to define regex rules to ignore paths (like .gitignore)
-* [ ] Shell completions
+* [x] 🌲 Overlay multiple sources trees on top of each other
+* [x] ✂ In-path variable expansion (basically path substitution)
+* [x] 🪪 4 different profile formats (json, toml, yaml, env)
+* [x] 🪝 Hooks for custom actions
+* [x] 🌈 Pretty colors
+* [x] 📏 Ability to define regex rules to ignore paths (like .gitignore)
+* [x] 🔒 Preserve file permissions
+* [ ] 🐚 Shell completions
+
+### Platform specific
+
+#### Unix
+
+* [x] ⏰ Preserve ownership & timestamps of files
+* [x] 🐮 Make CoW filesystem copies (requires support from the filesystem (btrfs, xfs, ...))
 
 ## Installation
 
@@ -63,7 +66,7 @@ cargo install turboinstall
 ## Usage
 
 <details>
-<summary>Command line arguments</summary>
+<summary>Unix command line arguments</summary>
 
 ```bash
 A simple tool for overlaying directory trees on top of each other
@@ -80,13 +83,17 @@ Options:
   -l, --link                        Hard link files instead of copying
   -n, --no-clobber                  Do not overwrite existing files
   -u, --update                      Overwrite only when the source path is newer
-      --ignore </path/to/file>      Path to ignore file [default: .turboinstall/ignore]
+  -q, --quiet                       Don't print anything to the console
+      --ignore <path,path,...>      Paths to extra ignore files
+      --no-abort                    Don't exit on error
       --dry-run                     Do not perform any filesystem operations (implies --no-hooks)
       --no-hooks                    Do not run any hooks
       --hooks <type,type,...>       Only run these types of hooks [possible values: pre-install, post-install]
+      --porcelain                   Use machine readable output
+      --preserve <attr,attr,...>    Preserve the specified attributes [possible values: ownership, timestamps]
+      --reflink <when>              Create clone/CoW copies [default: auto] [possible values: never, always, auto]
   -h, --help                        Print help information
-  -V, --version                     Print version information
-
+  -V, --version                     Print version information```
 ```
 
 </details>
@@ -121,7 +128,7 @@ turboinstall ./dst ./src
 
 ### The ignore file
 
-The ignore file is a simple text file at `.turboinstall/ignore` that contains everyone's favorite regular expressions 🎉. Each line of the file contains a regex pattern that will be matched on each path of the overlay. In other words, just like `.gitignore` files.
+The ignore file is a simple text file at `.turboinstall/ignore` that contains everyone's favorite regular expressions 🎉. Each line of the file contains a regex pattern that will be matched on each path of the overlay. In other words, just like `.gitignore` files. Other ignore files can be specified on the command line with `--ignore`, relative paths will be resolved from the overlay root, while absolute paths will resolve normally.
 
 Let's suppose we have a source tree:
 
