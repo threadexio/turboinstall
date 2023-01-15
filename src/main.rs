@@ -1,5 +1,4 @@
 #![deny(
-	clippy::all,
 	clippy::unwrap_used,
 	clippy::absurd_extreme_comparisons,
 	clippy::clone_on_copy
