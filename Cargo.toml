@@ -8,6 +8,9 @@ license = "MIT"
 repository = "https://github.com/threadexio/turboinstall"
 readme = "README.md"
 
+autotests = false
+include = ["src/**/*", "Cargo.toml"]
+
 [dependencies]
 anyhow = "1.0"
 log = "0.4"
