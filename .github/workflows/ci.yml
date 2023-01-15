@@ -1,0 +1,65 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    if: "!startsWith(github.event.head_commit.message, '[no-ci]')"
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest"]
+
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          components: rustfmt, clippy
+
+      - name: Check
+        run: |
+          cargo fmt --check --all
+          cargo clippy --no-deps
+
+      - name: Build
+        run: |
+          cargo build
+
+      - name: Run tests
+        run: |
+          ./scripts/test.sh
+
+  build-release:
+    needs: ["test"]
+
+    strategy:
+      fail-fast: true
+      matrix:
+        os: ["ubuntu-latest"]
+
+    runs-on: ${{ matrix.os }}
+    name: Build release on ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup toolchain
+        uses: actions-rs/toolchain@v1
+
+      - name: Build
+        run: |
+          cargo build --release
+          cp target/release/turboinstall .
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: turboinstall-${{ matrix.os }}
+          path: turboinstall
