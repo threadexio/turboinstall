@@ -264,8 +264,8 @@ DIR: "/usr/local"
 
 ```bash
 # This is a comment
-# Also, the quotes are not needed
-VARIABLE_1='VALUE_1'
+
+VARIABLE_1=VALUE_1
 DIR="/usr/local"
 ```
 
