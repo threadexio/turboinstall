@@ -5,7 +5,11 @@ use std::fs;
 #[derive(Debug, clap::Args)]
 pub struct PlatformOptions {}
 
-pub fn create_dir_all(src: &Path, dst: &Path, _: &Options) -> Result<()> {
+pub fn create_dir_all(
+	src: &Path,
+	dst: &Path,
+	_: &Options,
+) -> Result<()> {
 	let src_metadata = src.metadata()?;
 	fs::create_dir_all(dst)?;
 

@@ -54,7 +54,9 @@ pub fn create_dir_all(
 	for p in &options.platform_options.preserve {
 		match p {
 			Preserve::Ownership => {
-				use nix::unistd::{fchownat, FchownatFlags, Gid, Uid};
+				use nix::unistd::{
+					fchownat, FchownatFlags, Gid, Uid,
+				};
 
 				let uid = src_metadata.uid();
 				let gid = src_metadata.gid();
@@ -69,7 +71,10 @@ pub fn create_dir_all(
 				.context("failed to preserve ownership")?;
 			},
 			Preserve::Timestamps => {
-				use nix::sys::{stat::utimensat, stat::UtimensatFlags, time::TimeSpec};
+				use nix::sys::{
+					stat::utimensat, stat::UtimensatFlags,
+					time::TimeSpec,
+				};
 
 				let atime = TimeSpec::new(
 					src_metadata.atime(),
@@ -81,8 +86,14 @@ pub fn create_dir_all(
 					src_metadata.mtime_nsec(),
 				);
 
-				utimensat(None, dst_path, &atime, &mtime, UtimensatFlags::NoFollowSymlink)
-					.context("failed to preserve timestamps")?;
+				utimensat(
+					None,
+					dst_path,
+					&atime,
+					&mtime,
+					UtimensatFlags::NoFollowSymlink,
+				)
+				.context("failed to preserve timestamps")?;
 			},
 		}
 	}
