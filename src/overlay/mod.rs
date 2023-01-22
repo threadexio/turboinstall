@@ -163,8 +163,8 @@ impl Overlay {
 				)
 			})?;
 
-		let src = self.src.join(&src_rel_path);
-		let dst = self.dst.join(&dst_rel_path);
+		let src = self.src.join(src_rel_path);
+		let dst = self.dst.join(dst_rel_path);
 
 		let src_metadata = src.metadata().with_context(|| {
 			format!("failed to get metadata for '{}'", src.display())
@@ -210,7 +210,7 @@ impl Overlay {
 
 		if !options.dry_run {
 			if src.is_dir() {
-				platform::create_dir_all(&dst, options)
+				platform::create_dir_all(&src, &dst, options)
 					.with_context(|| {
 						format!(
 							"failed to create directory '{}'",

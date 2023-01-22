@@ -40,8 +40,53 @@ pub struct PlatformOptions {
 	reflink: Reflink,
 }
 
-pub fn create_dir_all(dst_path: &Path, _: &Options) -> Result<()> {
+pub fn create_dir_all(
+	src_path: &Path,
+	dst_path: &Path,
+	options: &Options,
+) -> Result<()> {
+	let src_metadata = src_path.metadata()?;
 	fs::create_dir_all(dst_path)?;
+
+	fs::set_permissions(dst_path, src_metadata.permissions())
+		.context("failed to preserve permissions")?;
+
+	for p in &options.platform_options.preserve {
+		match p {
+			Preserve::Ownership => {
+				use nix::unistd::{fchownat, FchownatFlags, Gid, Uid};
+
+				let uid = src_metadata.uid();
+				let gid = src_metadata.gid();
+
+				fchownat(
+					None,
+					dst_path,
+					Some(Uid::from_raw(uid)),
+					Some(Gid::from_raw(gid)),
+					FchownatFlags::NoFollowSymlink,
+				)
+				.context("failed to preserve ownership")?;
+			},
+			Preserve::Timestamps => {
+				use nix::sys::{stat::utimensat, stat::UtimensatFlags, time::TimeSpec};
+
+				let atime = TimeSpec::new(
+					src_metadata.atime(),
+					src_metadata.atime_nsec(),
+				);
+
+				let mtime = TimeSpec::new(
+					src_metadata.mtime(),
+					src_metadata.mtime_nsec(),
+				);
+
+				utimensat(None, dst_path, &atime, &mtime, UtimensatFlags::NoFollowSymlink)
+					.context("failed to preserve timestamps")?;
+			},
+		}
+	}
+
 	Ok(())
 }
 
@@ -61,11 +106,11 @@ pub fn copy(
 ) -> Result<()> {
 	let src_metadata = src_path.metadata()?;
 
-	let src = fs::OpenOptions::new()
+	let mut src = fs::OpenOptions::new()
 		.read(true)
 		.open(src_path)
 		.context("failed to open source")?;
-	let dst = fs::OpenOptions::new()
+	let mut dst = fs::OpenOptions::new()
 		.write(true)
 		.create(true)
 		.truncate(true)
@@ -75,9 +120,13 @@ pub fn copy(
 
 	// decide if we are going to use reflinks
 	{
-		let reflink = || reflink(dst.as_raw_fd(), src.as_raw_fd());
+		let reflink = {
+			let dst_fd = dst.as_raw_fd();
+			let src_fd = src.as_raw_fd();
+			move || reflink(dst_fd, src_fd)
+		};
 
-		let copy_file = || -> Result<()> {
+		let mut copy_file = || -> Result<()> {
 			// tell the kernel we are going to need dst
 			// so it can load it in memory
 			nix::fcntl::posix_fadvise(
@@ -92,14 +141,8 @@ pub fn copy(
 			fs::set_permissions(dst_path, src_metadata.permissions())
 				.context("failed to preserve permissions")?;
 
-			nix::fcntl::copy_file_range(
-				src.as_raw_fd(),
-				None,
-				dst.as_raw_fd(),
-				None,
-				usize::MAX,
-			)
-			.context("failed to copy file data")?;
+			std::io::copy(&mut src, &mut dst)
+				.context("failed to copy file data")?;
 
 			Ok(())
 		};
