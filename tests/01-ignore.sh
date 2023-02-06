@@ -28,7 +28,7 @@ function test_multiple_ignore {
 	echo $dst
 
 	turboinstall \
-		--ignore ".turboinstall/ignore_1" \
+		--ignore-file ".turboinstall/ignore_1" \
 		-- "$dst" "$src"
 
 	mapfile -t dst_paths < <(dir_tree_contents "$dst")

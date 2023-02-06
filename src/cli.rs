@@ -7,6 +7,7 @@ use clap::{CommandFactory, Parser, ValueHint};
 use crate::overlay;
 use crate::profile;
 
+#[warn(unused)]
 #[derive(Debug, Parser)]
 #[clap(
 	name = clap::crate_name!(),
@@ -81,6 +82,14 @@ pub struct Options {
 
 	#[clap(
 		long = "ignore",
+		help = "Regex path pattern to ignore",
+		value_name("pattern"),
+		value_hint(ValueHint::AnyPath)
+	)]
+	pub ignore_patterns: Vec<String>,
+
+	#[clap(
+		long = "ignore-file",
 		help = "Paths to extra ignore files",
 		value_name("path,path,..."),
 		value_delimiter(','),

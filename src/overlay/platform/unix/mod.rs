@@ -148,10 +148,6 @@ pub fn copy(
 			)
 			.context("failed to preload destination")?;
 
-			// std::fs::copy also copies the permissions, so we have to guarantee the same behavior
-			fs::set_permissions(dst_path, src_metadata.permissions())
-				.context("failed to preserve permissions")?;
-
 			std::io::copy(&mut src, &mut dst)
 				.context("failed to copy file data")?;
 
@@ -173,6 +169,10 @@ pub fn copy(
 				}
 			},
 		}
+
+		// std::fs::copy also copies the permissions, so we have to guarantee the same behavior
+		fs::set_permissions(dst_path, src_metadata.permissions())
+			.context("failed to preserve permissions")?;
 	}
 
 	// preserve attributes

@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use colored::Colorize;
+use lazy_static::__Deref;
 use log::{error, info, warn};
 
 use crate::cli::Options;
@@ -90,8 +91,14 @@ impl Overlay {
 		let mut ignore = ignore::Ignore::empty();
 
 		// default ignores
-		for pattern in DEFAULT_IGNORE {
-			ignore.add_pattern(pattern).with_context(|| format!("Default pattern '{}' failed to compile. This is a bug!", pattern))?;
+		for pattern in DEFAULT_IGNORE
+			.iter()
+			.map(|x| x.deref())
+			.chain(options.ignore_patterns.iter().map(|x| x.as_str()))
+		{
+			ignore.add_pattern(pattern).with_context(|| {
+				format!("Pattern '{}' failed to compile!", pattern)
+			})?;
 		}
 
 		// load ignore files if they exists
@@ -163,7 +170,11 @@ impl Overlay {
 				)
 			})?;
 
-		let src = self.src.join(src_rel_path);
+		let src = self
+			.src
+			.join(src_rel_path)
+			.canonicalize()
+			.context("failed to resolve source path")?;
 		let dst = self.dst.join(dst_rel_path);
 
 		let src_metadata = src.metadata().with_context(|| {
