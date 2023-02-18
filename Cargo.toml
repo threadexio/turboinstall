@@ -25,7 +25,7 @@ regex = { version = "1.7" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
-toml = "0.5"
+toml = "0.7.2"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.26", default-features = false, features = [
