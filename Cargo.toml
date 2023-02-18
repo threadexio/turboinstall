@@ -1,12 +1,14 @@
 [package]
 name = "turboinstall"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2021"
 authors = ["threadexio <pzarganitis@gmail.com>"]
 description = "A simple tool for overlaying directory trees on top of each other"
 license = "MIT"
 repository = "https://github.com/threadexio/turboinstall"
 readme = "README.md"
+keywords = ["packaging", "tool"]
+categories = ["filesystem"]
 
 autotests = false
 include = ["src/**/*", "Cargo.toml"]
