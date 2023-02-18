@@ -2,7 +2,7 @@ use std::collections::LinkedList;
 use std::fs;
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 use regex::{Regex, RegexBuilder};
 
@@ -39,14 +39,7 @@ impl Ignore {
 		&mut self,
 		file: impl AsRef<Path>,
 	) -> Result<usize> {
-		let contents = fs::read_to_string(file.as_ref())
-			.with_context(|| {
-				format!(
-					"failed to read ignore file '{}'",
-					file.as_ref().display()
-				)
-			})?;
-
+		let contents = fs::read_to_string(file.as_ref())?;
 		self.add_from_str(&contents)
 	}
 
@@ -66,12 +59,10 @@ impl Ignore {
 	}
 
 	fn compile_pattern(pattern: &str) -> Result<Regex> {
-		RegexBuilder::new(pattern)
+		let regex = RegexBuilder::new(pattern)
 			.case_insensitive(false)
-			.build()
-			.with_context(|| {
-				format!("failed to compile regex '{}'", pattern)
-			})
+			.build()?;
+		Ok(regex)
 	}
 }
 

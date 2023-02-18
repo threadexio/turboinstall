@@ -3,6 +3,7 @@
 	clippy::absurd_extreme_comparisons,
 	clippy::clone_on_copy
 )]
+#![warn(clippy::all, clippy::style)]
 #![allow(
 	clippy::collapsible_else_if,
 	clippy::collapsible_if,

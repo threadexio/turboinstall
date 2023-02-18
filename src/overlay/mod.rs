@@ -1,8 +1,8 @@
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
 use colored::Colorize;
-use lazy_static::__Deref;
 use log::{error, info, warn};
 
 use crate::cli::Options;
@@ -11,13 +11,9 @@ use crate::profile::Profile;
 mod ignore;
 pub mod platform;
 
-lazy_static::lazy_static! {
-	static ref DEFAULT_IGNORE_FILES: Vec<PathBuf> = [
-		".turboinstall/ignore"
-	].iter().map(|x| Path::new(x).to_path_buf()).collect();
-}
+static DEFAULT_IGNORE_FILES: &[&str] = &[".turboinstall/ignore"];
 
-const DEFAULT_IGNORE: &[&str] = &["^/.turboinstall"];
+static DEFAULT_IGNORE_PATTERNS: &[&str] = &["^/.turboinstall"];
 
 #[derive(Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
 pub enum HookType {
@@ -36,8 +32,8 @@ impl HookType {
 
 #[derive(Debug)]
 pub struct Overlay {
-	src: PathBuf,
-	dst: PathBuf,
+	src_root: PathBuf,
+	dst_root: PathBuf,
 }
 
 impl Overlay {
@@ -80,7 +76,7 @@ impl Overlay {
 			)
 		}
 
-		Ok(Self { src, dst })
+		Ok(Self { src_root: src, dst_root: dst })
 	}
 
 	pub fn install(
@@ -91,13 +87,13 @@ impl Overlay {
 		let mut ignore = ignore::Ignore::empty();
 
 		// default ignores
-		for pattern in DEFAULT_IGNORE
+		for pattern in DEFAULT_IGNORE_PATTERNS
 			.iter()
 			.map(|x| x.deref())
 			.chain(options.ignore_patterns.iter().map(|x| x.as_str()))
 		{
 			ignore.add_pattern(pattern).with_context(|| {
-				format!("Pattern '{}' failed to compile!", pattern)
+				format!("Failed to compile pattern `{}`", pattern)
 			})?;
 		}
 
@@ -105,19 +101,26 @@ impl Overlay {
 		{
 			// if the ignore path is absolute it will overwrite the self.src prefix
 			// and thus correctly use the absolute path
-			for ignore_path in DEFAULT_IGNORE_FILES
-				.iter()
-				.chain(options.ignore_paths.iter())
-			{
-				let ignore_path = self.src.join(ignore_path);
+			for ignore_path in
+				DEFAULT_IGNORE_FILES.iter().map(Path::new).chain(
+					options.ignore_paths.iter().map(|x| x.as_path()),
+				) {
+				let ignore_path = self.src_root.join(ignore_path);
 
 				if ignore_path.exists() {
-					ignore.add_from_file(ignore_path)?;
+					ignore.add_from_file(&ignore_path).with_context(
+						|| {
+							format!(
+								"Failed to read ignore file `{}`",
+								ignore_path.display()
+							)
+						},
+					)?;
 				}
 			}
 		}
 
-		let relative_paths = walkdir::WalkDir::new(&self.src)
+		walkdir::WalkDir::new(&self.src_root)
 			// dont return self.src again
 			.min_depth(1)
 			.contents_first(false)
@@ -127,9 +130,9 @@ impl Overlay {
 			// filter out all the problem entries
 			.filter_map(|x| x.ok())
 			.filter_map(|x| {
-				// convert to path relative to &self.src
-				x.path()
-					.strip_prefix(&self.src)
+				// convert path to relative to &self.src_root
+				x.into_path()
+					.strip_prefix(&self.src_root)
 					.map(|x| x.to_path_buf())
 					.ok()
 			})
@@ -139,52 +142,60 @@ impl Overlay {
 				// in the root of the overlay
 				let absolute_path = Path::new("/").join(x);
 				!ignore.matches(absolute_path.to_string_lossy())
-			});
+			}).try_for_each(|src_rel_path| -> Result<()> {
+				let src = self.get_src_path(&src_rel_path).with_context(|| format!("Failed to resolve source path `{}`", src_rel_path.display()))?;
+				let dst = self.get_dst_path(&src_rel_path, profile).with_context(|| format!("Failed to resolve path `{}`", src_rel_path.display()))?;
 
-		for src_rel_path in relative_paths {
-			let r = self.install_path(src_rel_path, profile, options);
+				let r = self.install_path(&src, &dst, options).with_context(|| format!("{}", src.display()));
 
-			if options.no_abort {
-				if let Err(e) = r {
-					error!("{} {:#}", "[Silent]".dimmed().white(), e);
+				if options.no_abort {
+					if let Err(e) = r {
+						error!("{} {:#}", "[Silent]".dimmed().white(), e);
+					}
+				} else {
+					r?
 				}
-			} else {
-				r?
-			}
-		}
 
-		Ok(())
+				Ok(())
+			})
+	}
+
+	fn get_src_path(&self, src_rel_path: &Path) -> Result<PathBuf> {
+		let src = self.src_root.join(src_rel_path).canonicalize()?;
+		Ok(src)
+	}
+
+	fn get_dst_path(
+		&self,
+		src_rel_path: &Path,
+		profile: &dyn Profile,
+	) -> Result<PathBuf> {
+		let dst_rel_path = expand_path(src_rel_path, profile)?;
+		let dst = self.dst_root.join(dst_rel_path);
+		Ok(dst)
 	}
 
 	fn install_path(
 		&self,
-		src_rel_path: PathBuf,
-		profile: &dyn Profile,
+		src: &Path,
+		dst: &Path,
 		options: &Options,
 	) -> Result<()> {
-		let dst_rel_path = expand_path(&src_rel_path, profile)
-			.with_context(|| {
-				format!(
-					"failed to expand path '{}'",
-					src_rel_path.display()
-				)
-			})?;
-
-		let src = self
-			.src
-			.join(src_rel_path)
-			.canonicalize()
-			.context("failed to resolve source path")?;
-		let dst = self.dst.join(dst_rel_path);
-
-		let src_metadata = src.metadata().with_context(|| {
-			format!("failed to get metadata for '{}'", src.display())
-		})?;
+		let src_metadata =
+			src.metadata().context("Failed to get metadata")?;
 
 		if dst.exists() {
+			if options.no_overwrite {
+				warn!(
+					"Not overwriting existing destination `{}`",
+					dst.display()
+				);
+				return Ok(());
+			}
+
 			let dst_metadata = dst.metadata().with_context(|| {
 				format!(
-					"failed to get metadata for '{}'",
+					"Failed to get destination `{}` metadata",
 					dst.display()
 				)
 			})?;
@@ -197,62 +208,48 @@ impl Overlay {
 				let dst_mtime =
 					dst_metadata.modified().unwrap_or(now);
 
-				if src_mtime < dst_mtime {
-					warn!(
-						"destination '{}' is newer than source '{}'",
-						dst.display(),
-						src.display(),
-					);
+				if dst_mtime > src_mtime {
+					warn!("Destination `{}` is newer", dst.display(),);
 					return Ok(());
-				} else if src_mtime == dst_mtime {
-					// dont do unnecessary operations
+				} else if dst_mtime == src_mtime {
 					return Ok(());
 				}
-			}
-
-			if options.no_overwrite {
-				warn!(
-					"not overwriting existing path '{}'",
-					dst.display()
-				);
-				return Ok(());
 			}
 		}
 
 		if !options.dry_run {
 			if src.is_dir() {
-				platform::create_dir_all(&src, &dst, options)
+				platform::create_dir_all(src, dst, options)
 					.with_context(|| {
 						format!(
-							"failed to create directory '{}'",
+							"Failed to create directory `{}`",
 							dst.display()
 						)
 					})?;
 			} else {
 				if options.hard_link {
-					platform::hard_link(&src, &dst, options)
+					platform::hard_link(src, dst, options)
 						.with_context(|| {
 							format!(
-								"failed to hard link '{}' to '{}'",
-								src.display(),
+								"Failed to hard link to `{}`",
 								dst.display()
 							)
 						})?
 				} else {
-					platform::copy(&src, &dst, options)
-						.with_context(|| {
+					platform::copy(src, dst, options).with_context(
+						|| {
 							format!(
-								"failed to install '{}' to '{}'",
-								src.display(),
+								"Failed to install to `{}`",
 								dst.display()
 							)
-						})?;
+						},
+					)?;
 				}
 			}
 		}
 
 		if options.machine_readable {
-			println!("{} {}", src.display(), dst.display());
+			info!(target: "no_fmt", "{} {}", src.display(), dst.display());
 		} else {
 			info!(target: "no_fmt", "{:>12} {} {} {}", "Installing".bold().bright_green(), src.display(), "to".bold().bright_cyan(), dst.display());
 		}
@@ -277,7 +274,7 @@ impl Overlay {
 		}
 
 		let hook_dir = self
-			.src
+			.src_root
 			.join(".turboinstall")
 			.join(hook_type.hook_dir_name());
 
@@ -308,8 +305,8 @@ impl Overlay {
 				info!(target: "no_fmt", "{:>12} {}", "Running".bold().bright_white(), hook_path.display());
 
 				let status = match Command::new(&hook_path)
-					.arg(&self.src)
-					.arg(&self.dst)
+					.arg(&self.src_root)
+					.arg(&self.dst_root)
 					.status()
 				{
 					Ok(v) => v,
