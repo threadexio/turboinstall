@@ -249,7 +249,7 @@ impl Overlay {
 		}
 
 		if options.machine_readable {
-			info!(target: "no_fmt", "{} {}", src.display(), dst.display());
+			println!("{} {}", src.display(), dst.display());
 		} else {
 			info!(target: "no_fmt", "{:>12} {} {} {}", "Installing".bold().bright_green(), src.display(), "to".bold().bright_cyan(), dst.display());
 		}
