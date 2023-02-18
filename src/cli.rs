@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 
 use clap::{CommandFactory, Parser, ValueHint};
+use log::info;
 
 use crate::overlay;
 use crate::profile;
@@ -170,11 +171,15 @@ pub fn init() -> Result<()> {
 	for overlay in &mut overlays {
 		use overlay::HookType;
 
+		let start = std::time::Instant::now();
+
 		overlay.run_hooks(HookType::PreInstall, &options)?;
 
 		overlay.install(profile.as_ref(), &options)?;
 
 		overlay.run_hooks(HookType::PostInstall, &options)?;
+
+		info!(target: "no_fmt", "{:>12} {} overlay(s) in {:.3}s", "Finished".bold().bright_green(), options.profile_path.to_string_lossy().dimmed(), start.elapsed().as_secs_f64());
 	}
 
 	Ok(())
