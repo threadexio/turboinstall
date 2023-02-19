@@ -2,7 +2,7 @@
 
 # $1 - path to dir
 function dir_tree_contents {
-	(cd -- "$1" && find . -printf '/%P\n')
+	(cd -- "$1" && find . -printf '/%P\n' | sort)
 }
 
 src="$TEST_DIR/profile-tree"
