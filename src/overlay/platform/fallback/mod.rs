@@ -1,6 +1,9 @@
-use super::prelude::*;
-
 use std::fs;
+use std::path::Path;
+
+use anyhow::{Context, Result};
+
+use crate::cli::Options;
 
 #[derive(Debug, clap::Args)]
 pub struct PlatformOptions {}
@@ -26,19 +29,19 @@ pub fn create_dir_all(
 
 pub fn hard_link(src: &Path, dst: &Path, _: &Options) -> Result<()> {
 	let _ = remove_file_if_exists(dst);
-	fs::hard_link(&src, &dst)?;
+	fs::hard_link(src, dst)?;
 	Ok(())
 }
 
 pub fn copy(src: &Path, dst: &Path, _: &Options) -> Result<()> {
 	let _ = remove_file_if_exists(dst);
-	fs::copy(&src, &dst)?;
+	fs::copy(src, dst)?;
 	Ok(())
 }
 
 fn remove_file_if_exists(path: &Path) -> Result<()> {
 	if path.exists() {
-		fs::remove_file(&path)?;
+		fs::remove_file(path)?;
 	}
 
 	Ok(())

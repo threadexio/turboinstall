@@ -210,7 +210,7 @@ fn init_log(options: &Options) -> Result<()> {
 			}
 		});
 
-	if !(options.quiet || options.machine_readable) {
+	if !options.quiet {
 		fern = fern.chain(std::io::stderr());
 	}
 

@@ -13,6 +13,9 @@ categories = ["filesystem"]
 autotests = false
 include = ["src/**/*", "Cargo.toml"]
 
+[features]
+no-platform-specific = []
+
 [dependencies]
 anyhow = "1.0"
 log = "0.4"
