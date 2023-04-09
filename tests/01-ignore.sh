@@ -2,7 +2,7 @@
 
 # $1 - path to dir
 function dir_tree_contents {
-	(cd -- "$1" && find . -printf '/%P\n' | sort -d)
+	(cd -- "$1" && find . -printf '/%P\n' | sort -df)
 }
 
 src="$TEST_DIR/ignore-tree"
