@@ -2,7 +2,7 @@
 
 # $1 - path to dir
 function dir_tree_hash {
-	(cd -- "$1" && find .) | sort | sha1sum | cut -d' ' -f1
+	(cd -- "$1" && find .) | sort -d | sha1sum | cut -d' ' -f1
 }
 
 function test_simple_tree {
