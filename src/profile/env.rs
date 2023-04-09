@@ -44,4 +44,11 @@ impl Profile for EnvProfile {
 	fn var(&self, item: &str) -> Option<&str> {
 		self.inner.get(item).map(|x| x.as_str())
 	}
+
+	fn list(&self) -> Vec<(String, String)> {
+		self.inner
+			.iter()
+			.map(|(k, v)| (k.clone(), v.clone()))
+			.collect()
+	}
 }

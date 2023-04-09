@@ -15,6 +15,7 @@ pub enum Format {
 
 pub trait Profile {
 	fn var(&self, item: &str) -> Option<&str>;
+	fn list(&self) -> Vec<(String, String)>;
 }
 
 pub struct NoProfile;
@@ -28,6 +29,10 @@ impl NoProfile {
 impl Profile for NoProfile {
 	fn var(&self, _: &str) -> Option<&str> {
 		None
+	}
+
+	fn list(&self) -> Vec<(String, String)> {
+		Vec::new()
 	}
 }
 

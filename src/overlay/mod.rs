@@ -261,6 +261,7 @@ impl Overlay {
 		&mut self,
 		hook_type: HookType,
 		options: &Options,
+		profile: &dyn Profile,
 	) -> Result<()> {
 		if options.no_hooks {
 			return Ok(());
@@ -304,10 +305,15 @@ impl Overlay {
 
 				info!(target: "no_fmt", "{:>12} {}", "Running".bold().bright_white(), hook_path.display());
 
-				let status = match Command::new(&hook_path)
-					.arg(&self.src_root)
-					.arg(&self.dst_root)
-					.status()
+
+				let mut command = Command::new(&hook_path);
+				command.arg(&self.src_root).arg(&self.dst_root);
+
+				for (k, v) in profile.list() {
+					command.env(k, v);
+				}
+
+				let status = match command.status()
 				{
 					Ok(v) => v,
 					Err(_) => {
@@ -410,6 +416,12 @@ mod tests {
 		impl Profile for HashMap<String, String> {
 			fn var(&self, s: &str) -> Option<&str> {
 				self.get(s).map(|x| x.as_str())
+			}
+
+			fn list(&self) -> Vec<(String, String)> {
+				self.iter()
+					.map(|(k, v)| (k.clone(), v.clone()))
+					.collect()
 			}
 		}
 

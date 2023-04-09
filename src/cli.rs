@@ -173,11 +173,19 @@ pub fn init() -> Result<()> {
 
 		let start = std::time::Instant::now();
 
-		overlay.run_hooks(HookType::PreInstall, &options)?;
+		overlay.run_hooks(
+			HookType::PreInstall,
+			&options,
+			profile.as_ref(),
+		)?;
 
 		overlay.install(profile.as_ref(), &options)?;
 
-		overlay.run_hooks(HookType::PostInstall, &options)?;
+		overlay.run_hooks(
+			HookType::PostInstall,
+			&options,
+			profile.as_ref(),
+		)?;
 
 		info!(target: "no_fmt", "{:>12} {} overlay(s) in {:.3}s", "Finished".bold().bright_green(), options.profile_path.to_string_lossy().dimmed(), start.elapsed().as_secs_f64());
 	}
